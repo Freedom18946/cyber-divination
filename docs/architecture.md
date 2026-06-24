@@ -48,8 +48,9 @@ main
 
 ### `Result`
 
-- 渲染六爻图、本卦名、变爻说明
-- 再按 `Enter` 会重新开始新一轮起卦
+- 渲染六爻图、本卦名、之卦、变爻说明与变后六爻
+- 第一次 `Enter` 显现卦辞/爻辞解读（按传统占法选取）
+- 第二次 `Enter` 才重新开始新一轮起卦，回到 `Welcome`
 
 ## 可维护扩展点
 
@@ -65,13 +66,13 @@ main
 
 ### 2. 卦辞/爻辞
 
-建议不要直接塞进 `App`。
+已实现。做法为：
 
-更好的做法是：
+- 在 `yijing.rs` 新增静态数据库 `HEXAGRAM_TEXTS`（64 卦，每卦 1 卦辞 + 6 爻辞）与 `interpretation()` 函数
+- 状态机新增 `interpretation_revealed` 标志，`Result` 阶段 `Enter` 分两段：先显解读、再重启
+- `UI` 仅消费 `interpretation()` 返回的 `InterpretationEntry`，依赖方向不变
 
-- 在 `yijing.rs` 新增静态数据库结构
-- 让 `HexagramResult` 增加可选字段
-- UI 按需渲染，不改变状态机
+传统占法取读规则：无变爻→本卦卦辞；1–5 个变爻→对应本卦爻辞；全 6 变→之卦卦辞。
 
 ### 3. 动画与视觉
 

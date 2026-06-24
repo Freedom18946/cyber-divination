@@ -327,7 +327,8 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(
             match app.phase() {
                 AppPhase::Welcome => "Enter 开始  ·  q 退出",
-                AppPhase::Result => "Enter 再问  ·  q 退出",
+                AppPhase::Result if app.interpretation_revealed() => "Enter 再问  ·  q 退出",
+                AppPhase::Result => "Enter 解读  ·  q 退出",
                 _ => "Enter 继续  ·  q 退出",
             },
             Style::default().fg(DIM),
@@ -642,6 +643,27 @@ fn relating_and_notes_lines(app: &App, stage: u8) -> Vec<Line<'static>> {
         }
     }
 
+    // 解读区：仅在解读已显现且动画完成后追加，不重排布局。
+    if app.interpretation_revealed() && stage >= 4 {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("解读", Style::default().fg(WARM))));
+        for entry in yijing::interpretation(&result) {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                entry.label,
+                Style::default().fg(WARM).add_modifier(Modifier::BOLD),
+            )));
+            lines.push(Line::from(Span::styled(
+                entry.classic,
+                Style::default().fg(TEXT),
+            )));
+            lines.push(Line::from(Span::styled(
+                entry.gloss,
+                Style::default().fg(DIM),
+            )));
+        }
+    }
+
     lines
 }
 
@@ -649,6 +671,10 @@ fn relating_and_notes_lines(app: &App, stage: u8) -> Vec<Line<'static>> {
 
 /// 渐进揭示时序（拉长节奏）。
 fn reveal_stage(app: &App) -> u8 {
+    // 解读显现后无需等待动画，直接进入完整展示，避免解读与半动画并存。
+    if app.phase() == AppPhase::Result && app.interpretation_revealed() {
+        return 4;
+    }
     let ms = app.phase_elapsed().as_millis();
     match ms {
         0..=399 => 0,     // 纯黑 + 呼吸光点
@@ -661,6 +687,10 @@ fn reveal_stage(app: &App) -> u8 {
 
 /// Stage 2: 六爻自上而下逐行显现，每行间隔 100ms。
 fn lines_to_reveal(app: &App) -> usize {
+    // 解读已显现时，六爻完整展示。
+    if app.phase() == AppPhase::Result && app.interpretation_revealed() {
+        return 6;
+    }
     let ms = app.phase_elapsed().as_millis();
     if ms < 900 {
         return 0;
@@ -736,7 +766,7 @@ mod tests {
 
     use super::render;
     use crate::{
-        app::App,
+        app::{App, AppPhase},
         entropy::{EntropySample, EntropySource},
     };
 
@@ -792,6 +822,29 @@ mod tests {
 
         let snapshot = render_snapshot(&app, 112, 30);
         assert_snapshot("tests/snapshots/result_screen.txt", &snapshot);
+    }
+
+    #[test]
+    fn result_screen_interpreted_snapshot() {
+        let mut app = App::new(Box::new(ScriptedEntropy::new(vec![
+            2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 2, 3, 2,
+        ])));
+
+        app.handle_key(KeyCode::Enter.into()).expect("welcome");
+        for _ in 1..18 {
+            app.handle_key(KeyCode::Enter.into()).expect("casting");
+        }
+        app.handle_key(KeyCode::Enter.into()).expect("assembling");
+        app.handle_key(KeyCode::Enter.into()).expect("reverse");
+        assert_eq!(app.phase(), AppPhase::Result);
+
+        // 多按一次 Enter 显解读，再等动画完成。
+        app.handle_key(KeyCode::Enter.into()).expect("reveal interpretation");
+        assert!(app.interpretation_revealed());
+        thread::sleep(Duration::from_millis(2300));
+
+        let snapshot = render_snapshot(&app, 112, 30);
+        assert_snapshot("tests/snapshots/result_screen_interpreted.txt", &snapshot);
     }
 
     fn render_snapshot(app: &App, width: u16, height: u16) -> String {

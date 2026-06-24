@@ -49,6 +49,8 @@ pub struct App {
     tick_count: u64,
     last_cast_at: Option<Instant>,
     last_entropy: Option<(String, u8)>,
+    /// Result 阶段：解读是否已显现。第一次 Enter 显解读，第二次 Enter 重启。
+    interpretation_revealed: bool,
 }
 
 impl Default for App {
@@ -71,6 +73,7 @@ impl App {
             tick_count: 0,
             last_cast_at: None,
             last_entropy: None,
+            interpretation_revealed: false,
         }
     }
 
@@ -118,13 +121,18 @@ impl App {
         &self.line_sums
     }
 
+    pub fn interpretation_revealed(&self) -> bool {
+        self.interpretation_revealed
+    }
+
     pub fn instruction(&self) -> String {
         match self.phase {
             AppPhase::Welcome => "心中默问。Enter 落子。".to_string(),
             AppPhase::Casting => format!("{:02} / 18", self.raw_digits.len() + 1),
             AppPhase::Assembling => "Enter 收束。".to_string(),
             AppPhase::ReverseConfirm => "Enter 显卦。".to_string(),
-            AppPhase::Result => "再问一次？Enter。".to_string(),
+            AppPhase::Result if self.interpretation_revealed => "再问一次？Enter。".to_string(),
+            AppPhase::Result => "Enter 解读。".to_string(),
         }
     }
 
@@ -243,11 +251,19 @@ impl App {
                 self.set_pulse(pulse);
             }
             AppPhase::Result => {
-                let next = App::new(std::mem::replace(
-                    &mut self.entropy,
-                    Box::new(SystemEntropy),
-                ));
-                *self = next;
+                if !self.interpretation_revealed {
+                    // 第一段 Enter：显现卦辞/爻辞解读。
+                    self.interpretation_revealed = true;
+                    self.push_journal("解读显现。");
+                    self.set_pulse("解读显现。");
+                } else {
+                    // 第二段 Enter：重新开始新一轮起卦。
+                    let next = App::new(std::mem::replace(
+                        &mut self.entropy,
+                        Box::new(SystemEntropy),
+                    ));
+                    *self = next;
+                }
             }
         }
         Ok(())
@@ -418,6 +434,12 @@ mod tests {
         assert_eq!(app.casts_completed(), 18);
         assert_eq!(app.completed_lines(), 6);
 
+        // Result 阶段分两段：第一次 Enter 显解读，第二次 Enter 重启。
+        assert!(!app.interpretation_revealed());
+        app.handle_key(KeyCode::Enter.into()).expect("reveal interpretation");
+        assert!(app.interpretation_revealed());
+        assert_eq!(app.phase(), AppPhase::Result);
+
         app.handle_key(KeyCode::Enter.into()).expect("restart");
         assert_eq!(app.phase(), AppPhase::Welcome);
         assert_eq!(app.casts_completed(), 0);
@@ -440,5 +462,32 @@ mod tests {
         assert_eq!(app.phase(), AppPhase::Result);
         let result = app.current_result().expect("second hexagram");
         assert_eq!(result.primary.name, "天水讼");
+    }
+
+    #[test]
+    fn result_enter_reveals_then_restarts() {
+        let pattern = vec![2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 2, 3, 2];
+        let mut app = App::new(Box::new(ScriptedEntropy::new(pattern)));
+
+        // 走完一轮到 Result。
+        app.handle_key(KeyCode::Enter.into()).expect("welcome -> cast");
+        for _ in 1..18 {
+            app.handle_key(KeyCode::Enter.into()).expect("casting");
+        }
+        app.handle_key(KeyCode::Enter.into()).expect("assembling");
+        app.handle_key(KeyCode::Enter.into()).expect("reverse confirm");
+        assert_eq!(app.phase(), AppPhase::Result);
+        assert!(!app.interpretation_revealed());
+
+        // 第一次 Enter：显解读，仍处于 Result，且解读已显现。
+        app.handle_key(KeyCode::Enter.into()).expect("reveal interpretation");
+        assert_eq!(app.phase(), AppPhase::Result);
+        assert!(app.interpretation_revealed());
+
+        // 第二次 Enter：重启回 Welcome，状态清零。
+        app.handle_key(KeyCode::Enter.into()).expect("restart");
+        assert_eq!(app.phase(), AppPhase::Welcome);
+        assert_eq!(app.casts_completed(), 0);
+        assert!(!app.interpretation_revealed());
     }
 }

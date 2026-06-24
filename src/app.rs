@@ -243,12 +243,10 @@ impl App {
                 self.set_pulse(pulse);
             }
             AppPhase::Result => {
-                let mut next = App::new(std::mem::replace(
+                let next = App::new(std::mem::replace(
                     &mut self.entropy,
                     Box::new(SystemEntropy),
                 ));
-                next.transition_to(AppPhase::Casting);
-                next.cast_digit()?;
                 *self = next;
             }
         }
@@ -402,5 +400,45 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::empty()))
             .expect("plain c");
         assert!(!app.should_quit());
+    }
+
+    #[test]
+    fn restart_returns_to_welcome_with_clean_state() {
+        let pattern = vec![2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 2, 3, 2];
+        let mut app = App::new(Box::new(ScriptedEntropy::new(pattern.repeat(2))));
+
+        app.handle_key(KeyCode::Enter.into())
+            .expect("welcome -> first cast");
+        for _ in 1..18 {
+            app.handle_key(KeyCode::Enter.into()).expect("casting");
+        }
+        app.handle_key(KeyCode::Enter.into()).expect("assembling");
+        app.handle_key(KeyCode::Enter.into()).expect("reverse confirm");
+        assert_eq!(app.phase(), AppPhase::Result);
+        assert_eq!(app.casts_completed(), 18);
+        assert_eq!(app.completed_lines(), 6);
+
+        app.handle_key(KeyCode::Enter.into()).expect("restart");
+        assert_eq!(app.phase(), AppPhase::Welcome);
+        assert_eq!(app.casts_completed(), 0);
+        assert_eq!(app.completed_lines(), 0);
+        assert_eq!(app.journal_entries().len(), 1);
+        assert_eq!(app.journal_entries()[0], "等待落子。");
+
+        app.handle_key(KeyCode::Enter.into())
+            .expect("restart welcome -> cast");
+        assert_eq!(app.phase(), AppPhase::Casting);
+        assert_eq!(app.casts_completed(), 1);
+
+        for _ in 1..18 {
+            app.handle_key(KeyCode::Enter.into()).expect("restart casting");
+        }
+        app.handle_key(KeyCode::Enter.into())
+            .expect("restart assembling");
+        app.handle_key(KeyCode::Enter.into())
+            .expect("restart reverse confirm");
+        assert_eq!(app.phase(), AppPhase::Result);
+        let result = app.current_result().expect("second hexagram");
+        assert_eq!(result.primary.name, "天水讼");
     }
 }

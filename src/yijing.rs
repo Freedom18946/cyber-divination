@@ -237,4 +237,127 @@ mod tests {
         assert_eq!(transformed_line_value(8), 8);
         assert_eq!(transformed_line_value(9), 8);
     }
+
+    #[test]
+    fn parameterized_hexagram_mapping() {
+        struct Case {
+            label: &'static str,
+            lines: [u8; 6],
+            primary_index: usize,
+            primary_name: &'static str,
+            changing: Vec<String>,
+            relating_name: Option<&'static str>,
+            transformed: [u8; 6],
+        }
+
+        let cases = [
+            Case {
+                label: "全少阴为坤",
+                lines: [8, 8, 8, 8, 8, 8],
+                primary_index: 0,
+                primary_name: "坤为地",
+                changing: vec![],
+                relating_name: None,
+                transformed: [8, 8, 8, 8, 8, 8],
+            },
+            Case {
+                label: "下乾上坤为泰",
+                lines: [7, 7, 7, 8, 8, 8],
+                primary_index: 7,
+                primary_name: "地天泰",
+                changing: vec![],
+                relating_name: None,
+                transformed: [7, 7, 7, 8, 8, 8],
+            },
+            Case {
+                label: "下坤上乾为否",
+                lines: [8, 8, 8, 7, 7, 7],
+                primary_index: 56,
+                primary_name: "天地否",
+                changing: vec![],
+                relating_name: None,
+                transformed: [8, 8, 8, 7, 7, 7],
+            },
+            Case {
+                label: "双坎为水",
+                lines: [8, 7, 8, 8, 7, 8],
+                primary_index: 18,
+                primary_name: "坎为水",
+                changing: vec![],
+                relating_name: None,
+                transformed: [8, 7, 8, 8, 7, 8],
+            },
+            Case {
+                label: "全老阳本乾之坤",
+                lines: [9, 9, 9, 9, 9, 9],
+                primary_index: 63,
+                primary_name: "乾为天",
+                changing: vec![
+                    "初九".to_string(),
+                    "九二".to_string(),
+                    "九三".to_string(),
+                    "九四".to_string(),
+                    "九五".to_string(),
+                    "上九".to_string(),
+                ],
+                relating_name: Some("坤为地"),
+                transformed: [8, 8, 8, 8, 8, 8],
+            },
+            Case {
+                label: "全老阴本坤之乾",
+                lines: [6, 6, 6, 6, 6, 6],
+                primary_index: 0,
+                primary_name: "坤为地",
+                changing: vec![
+                    "初六".to_string(),
+                    "六二".to_string(),
+                    "六三".to_string(),
+                    "六四".to_string(),
+                    "六五".to_string(),
+                    "上六".to_string(),
+                ],
+                relating_name: Some("乾为天"),
+                transformed: [7, 7, 7, 7, 7, 7],
+            },
+            Case {
+                label: "含变爻初九六四",
+                lines: [9, 8, 7, 6, 8, 7],
+                primary_index: 37,
+                primary_name: "山火贲",
+                changing: vec!["初九".to_string(), "六四".to_string()],
+                relating_name: Some("火山旅"),
+                transformed: [8, 8, 7, 7, 8, 7],
+            },
+        ];
+
+        for case in cases {
+            let result = analyze_hexagram(&case.lines);
+            assert_eq!(
+                result.primary.index, case.primary_index,
+                "{}: primary index",
+                case.label
+            );
+            assert_eq!(
+                result.primary.name, case.primary_name,
+                "{}: primary name",
+                case.label
+            );
+            assert_eq!(
+                result.changing_lines, case.changing,
+                "{}: changing lines",
+                case.label
+            );
+            assert_eq!(
+                result.relating.map(|r| r.name),
+                case.relating_name,
+                "{}: relating name",
+                case.label
+            );
+            assert_eq!(
+                result.transformed_lines, case.transformed,
+                "{}: transformed lines",
+                case.label
+            );
+        }
+    }
 }

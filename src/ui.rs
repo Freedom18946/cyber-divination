@@ -770,6 +770,13 @@ mod tests {
     }
 
     #[test]
+    fn welcome_screen_small_snapshot() {
+        let app = App::new(Box::new(ScriptedEntropy::new(vec![2; 18])));
+        let snapshot = render_snapshot(&app, 60, 18);
+        assert_snapshot("tests/snapshots/welcome_screen_small.txt", &snapshot);
+    }
+
+    #[test]
     fn result_screen_snapshot_shows_relating_hexagram() {
         let mut app = App::new(Box::new(ScriptedEntropy::new(vec![
             2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 2, 3, 2,

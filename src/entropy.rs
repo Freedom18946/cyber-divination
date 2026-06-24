@@ -39,7 +39,7 @@ pub fn generate_timing_digit(throw_no: usize) -> Result<EntropySample> {
     let mut os_entropy = [0u8; 16];
     fill(&mut os_entropy)?;
 
-    let mut mixed = (now as u64) ^ ((now >> 64) as u64) ^ (throw_no as u64).rotate_left(17);
+    let mut mixed = (now as u64) ^ (throw_no as u64).rotate_left(17);
     for chunk in os_entropy.chunks_exact(8) {
         mixed ^= u64::from_le_bytes(chunk.try_into().expect("8-byte chunk"));
         mixed = splitmix64(mixed);

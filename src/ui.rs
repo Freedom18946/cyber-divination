@@ -228,7 +228,7 @@ fn render_result_scene(frame: &mut Frame, area: Rect, app: &App) {
             ])
             .split(area);
 
-        let dot_on = (app.tick_count() / 10) % 2 == 0;
+        let dot_on = (app.tick_count() / 10).is_multiple_of(2);
         let style = if dot_on {
             Style::default().fg(WARM)
         } else {
@@ -349,7 +349,7 @@ fn formation_lines(app: &App) -> Vec<Line<'static>> {
         AppPhase::Casting => {
             let flash = app
                 .last_cast_elapsed()
-                .map_or(false, |d| d.as_millis() < 250);
+                .is_some_and(|d| d.as_millis() < 250);
             let mut lines = Vec::new();
 
             for (idx, value) in app.line_sums().iter().copied().enumerate().rev() {
@@ -455,7 +455,7 @@ fn tempo_lines(app: &App) -> Vec<Line<'static>> {
 fn trace_summary_lines(app: &App) -> Vec<Line<'static>> {
     let flash = app
         .last_cast_elapsed()
-        .map_or(false, |d| d.as_millis() < 250);
+        .is_some_and(|d| d.as_millis() < 250);
     let mut lines = vec![
         Line::from(Span::styled(
             format!("取数  {:02}/18", app.casts_completed()),
@@ -501,7 +501,7 @@ fn trace_log_lines(app: &App) -> Vec<Line<'static>> {
 
     let flash = app
         .last_cast_elapsed()
-        .map_or(false, |d| d.as_millis() < 250);
+        .is_some_and(|d| d.as_millis() < 250);
 
     for (i, entry) in app.journal_entries().iter().rev().take(limit).enumerate() {
         let style = if i == 0 && flash {
@@ -564,7 +564,7 @@ fn primary_hexagram_lines(app: &App, stage: u8) -> Vec<Line<'static>> {
 
         // 变爻脉冲：大部分时间亮，短暂暗
         let style = if is_changing {
-            let pulse = (app.tick_count() / 8) % 3 != 0;
+            let pulse = !(app.tick_count() / 8).is_multiple_of(3);
             if pulse {
                 Style::default().fg(WARM).add_modifier(Modifier::BOLD)
             } else {
@@ -775,12 +775,12 @@ mod tests {
             2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 2, 3, 2,
         ])));
 
-        app.handle_key(KeyCode::Enter).expect("welcome");
+        app.handle_key(KeyCode::Enter.into()).expect("welcome");
         for _ in 1..18 {
-            app.handle_key(KeyCode::Enter).expect("casting");
+            app.handle_key(KeyCode::Enter.into()).expect("casting");
         }
-        app.handle_key(KeyCode::Enter).expect("assembling");
-        app.handle_key(KeyCode::Enter).expect("reverse");
+        app.handle_key(KeyCode::Enter.into()).expect("assembling");
+        app.handle_key(KeyCode::Enter.into()).expect("reverse");
         thread::sleep(Duration::from_millis(2300));
 
         let snapshot = render_snapshot(&app, 112, 30);

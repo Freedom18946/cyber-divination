@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::{
     entropy::{EntropySource, SystemEntropy},
@@ -191,10 +191,16 @@ impl App {
         }
     }
 
-    pub fn handle_key(&mut self, code: KeyCode) -> Result<()> {
-        match code {
-            KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-            KeyCode::Enter => self.handle_enter()?,
+    pub fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
+        match key {
+            KeyEvent { code: KeyCode::Char('q'), .. }
+            | KeyEvent { code: KeyCode::Esc, .. } => self.should_quit = true,
+            KeyEvent { code: KeyCode::Char('c'), modifiers, .. }
+                if modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.should_quit = true;
+            }
+            KeyEvent { code: KeyCode::Enter, .. } => self.handle_enter()?,
             _ => {}
         }
         Ok(())
@@ -259,7 +265,7 @@ impl App {
         self.set_pulse(format!("{} · {}", short_fp, sample.digit));
         self.last_entropy = Some((sample.fingerprint, sample.digit));
 
-        if self.raw_digits.len() % 3 == 0 {
+        if self.raw_digits.len().is_multiple_of(3) {
             let line_idx = self.line_sums.len();
             let trio = &self.raw_digits[self.raw_digits.len() - 3..];
             let sum: u8 = trio.iter().copied().sum();
@@ -308,12 +314,11 @@ pub fn run(terminal: &mut AppTerminal) -> Result<()> {
     while !app.should_quit() {
         terminal.draw(|frame| ui::render(frame, &app))?;
 
-        if event::poll(Duration::from_millis(60))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    app.handle_key(key.code)?;
-                }
-            }
+        if event::poll(Duration::from_millis(60))?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            app.handle_key(key)?;
         }
 
         app.tick();
@@ -325,7 +330,7 @@ pub fn run(terminal: &mut AppTerminal) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use crossterm::event::KeyCode;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     use super::{App, AppPhase};
     use crate::entropy::{EntropySample, EntropySource};
@@ -358,19 +363,19 @@ mod tests {
             2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 3, 2, 3, 2,
         ])));
 
-        app.handle_key(KeyCode::Enter)
+        app.handle_key(KeyCode::Enter.into())
             .expect("welcome -> first cast");
         for _ in 1..18 {
-            app.handle_key(KeyCode::Enter).expect("casting");
+            app.handle_key(KeyCode::Enter.into()).expect("casting");
         }
 
         assert_eq!(app.phase(), AppPhase::Assembling);
         assert_eq!(app.line_sums(), &[6, 7, 8, 9, 7, 7]);
 
-        app.handle_key(KeyCode::Enter).expect("assembling");
+        app.handle_key(KeyCode::Enter.into()).expect("assembling");
         assert_eq!(app.phase(), AppPhase::ReverseConfirm);
 
-        app.handle_key(KeyCode::Enter).expect("reverse confirm");
+        app.handle_key(KeyCode::Enter.into()).expect("reverse confirm");
         assert_eq!(app.phase(), AppPhase::Result);
 
         let result = app.current_result().expect("hexagram result");
@@ -380,5 +385,22 @@ mod tests {
         );
         assert_eq!(result.primary.name, "天水讼");
         assert_eq!(result.relating.expect("relating").name, "风泽中孚");
+    }
+
+    #[test]
+    fn ctrl_c_quits_the_ritual() {
+        let mut app = App::new(Box::new(ScriptedEntropy::new(vec![2; 18])));
+        assert!(!app.should_quit());
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL))
+            .expect("ctrl+c");
+        assert!(app.should_quit());
+    }
+
+    #[test]
+    fn plain_c_does_not_quit() {
+        let mut app = App::new(Box::new(ScriptedEntropy::new(vec![2; 18])));
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::empty()))
+            .expect("plain c");
+        assert!(!app.should_quit());
     }
 }

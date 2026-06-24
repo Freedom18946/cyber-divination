@@ -29,7 +29,7 @@ pub fn render(frame: &mut Frame, app: &App) {
             Constraint::Length(1),  // 顶部留白
             Constraint::Length(2),  // header
             Constraint::Length(1),  // 分隔线
-            Constraint::Min(14),   // body
+            Constraint::Min(8),    // body
             Constraint::Length(1), // footer
         ])
         .split(frame.area());
